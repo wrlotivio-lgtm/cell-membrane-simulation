@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Membrane Channels Interactive Simulation</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            user-select: none;
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        canvas {
+            touch-action: none;
+            cursor: crosshair;
+        }
+        .glow-green { box-shadow: 0 0 15px rgba(34, 197, 94, 0.4); }
+        .glow-blue { box-shadow: 0 0 15px rgba(59, 130, 246, 0.4); }
+        .glow-purple { box-shadow: 0 0 15px rgba(168, 85, 247, 0.4); }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.5);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden bg-slate-950 text-slate-100">
+
+    <!-- Navigation / Header -->
+    <header class="h-16 border-b border-slate-800 bg-slate-900/80 px-6 flex items-center justify-between shrink-0 z-20">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center text-slate-950 font-bold text-xl shadow-lg shadow-emerald-500/20">
+                <i class="fa-solid font-bold fa-dna"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-tight bg-gradient-to-r from-emerald-400 to-cyan-300 bg-clip-text text-transparent">
+                    Cell Membrane Channels Lab
+                </h1>
+                <p class="text-xs text-slate-400">Interactive Transport & Diffusion Simulator</p>
+            </div>
+        </div>
+
+        <!-- Quick Demo Guide Banner Toggle -->
+        <div class="flex items-center gap-3">
+            <button id="guideBtn" class="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold flex items-center gap-2 transition-all">
+                <i class="fa-solid fa-graduation-cap"></i>
+                <span>Guided Demonstration</span>
+            </button>
+            <button id="resetSimBtn" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center gap-2 transition-all">
+                <i class="fa-solid fa-rotate-left"></i>
+                <span>Reset Simulation</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Guided Demo Banner Modal / Callout -->
+    <div id="guideBanner" class="hidden bg-slate-900 border-b border-emerald-500/30 p-4 px-6 z-10 flex flex-wrap items-center justify-between gap-4 transition-all">
+        <div class="flex items-start gap-4 max-w-4xl">
+            <div class="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+                <i class="fa-solid fa-circle-info text-base"></i>
+            </div>
+            <div>
+                <h3 id="guideStepTitle" class="font-bold text-emerald-400 text-sm">Step 1: Welcome to Membrane Channels</h3>
+                <p id="guideStepText" class="text-xs text-slate-300 mt-1 leading-relaxed">
+                    Observe the cell membrane dividing the **Extracellular Space** (Top) and **Intracellular Space** (Bottom). Use the controls on the right to inject green/blue molecules or click directly on the canvas to add them. Toggle channel gates open or closed to observe diffusion!
+                </p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+            <button id="prevGuideBtn" class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs text-slate-300">Previous</button>
+            <span id="guideStepNum" class="text-xs font-mono text-slate-400 px-2">1/4</span>
+            <button id="nextGuideBtn" class="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-xs text-white font-medium">Next Step</button>
+            <button id="closeGuideBtn" class="p-1 text-slate-400 hover:text-white ml-2"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+    </div>
+
+    <!-- Main Workspace -->
+    <div class="flex-1 flex overflow-hidden relative">
+        
+        <!-- Center Canvas Area -->
+        <main class="flex-1 relative flex flex-col bg-slate-950 overflow-hidden">
+            
+            <!-- Canvas Overlay Controls (Top Floating Bar) -->
+            <div class="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+                <!-- Status Labels -->
+                <div class="flex items-center gap-2 pointer-events-auto">
+                    <div class="glass-panel px-3 py-1.5 rounded-lg text-xs flex items-center gap-2 text-emerald-300 font-medium">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        Extracellular Fluid (Outside Cell)
+                    </div>
+                </div>
+
+                <!-- Simulation Speed & Play Controls -->
+                <div class="glass-panel p-1.5 rounded-xl flex items-center gap-2 pointer-events-auto">
+                    <button id="playPauseBtn" class="w-8 h-8 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center font-bold transition-all">
+                        <i id="playIcon" class="fa-solid fa-pause"></i>
+                    </button>
+                    <button id="stepBtn" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-all" title="Step Frame">
+                        <i class="fa-solid fa-forward-step"></i>
+                    </button>
+                    <div class="h-4 w-px bg-slate-700 mx-1"></div>
+                    <span class="text-xs text-slate-400 pl-1">Temp / Speed:</span>
+                    <input id="tempSlider" type="range" min="0.2" max="2.5" step="0.1" value="1.0" class="w-20 accent-emerald-500 h-1 bg-slate-700 rounded-lg cursor-pointer">
+                </div>
+            </div>
+
+            <!-- Interactive Simulation Canvas -->
+            <div class="w-full h-full relative flex-1">
+                <canvas id="simCanvas" class="w-full h-full block"></canvas>
+
+                <!-- Floating Canvas Hint / Instructions Overlay -->
+                <div class="absolute bottom-4 left-4 z-10 pointer-events-none">
+                    <div class="glass-panel px-3 py-2 rounded-lg text-[11px] text-slate-400 flex items-center gap-2">
+                        <i class="fa-solid fa-hand-pointer text-emerald-400"></i>
+                        <span>Click canvas to add particles • Click channel gates or buttons to open/close</span>
+                    </div>
+                </div>
+
+                <!-- Floating Bottom Fluid Label -->
+                <div class="absolute bottom-4 right-4 z-10 pointer-events-none">
+                    <div class="glass-panel px-3 py-1.5 rounded-lg text-xs flex items-center gap-2 text-cyan-300 font-medium">
+                        <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                        Intracellular Cytoplasm (Inside Cell)
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Control & Analytics Sidebar -->
+        <aside class="w-80 border-l border-slate-800 bg-slate-900/90 flex flex-col h-full shrink-0 z-20 overflow-y-auto">
+            
+            <!-- Channels Management Section -->
+            <div class="p-4 border-b border-slate-800">
+                <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
+                    <span>Membrane Channels</span>
+                    <span class="text-[10px] text-emerald-400 font-mono">3 Available</span>
+                </h2>
+
+                <div class="space-y-3">
+                    <!-- Channel 1: Green Leak Channel -->
+                    <div class="glass-panel p-3 rounded-xl border-l-4 border-l-emerald-500 flex flex-col gap-2">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
+                                <span class="text-xs font-semibold text-slate-200">Green Ion Channel</span>
+                            </div>
+                            <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono">Small Solutes</span>
+                        </div>
+                        <div class="flex items-center justify-between pt-1">
+                            <span id="ch1Status" class="text-xs text-emerald-400 font-medium">State: OPEN</span>
+                            <button id="toggleCh1" class="px-3 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-medium border border-emerald-500/40 transition-all">
+                                Toggle Gate
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Channel 2: Blue Gated Channel -->
+                    <div class="glass-panel p-3 rounded-xl border-l-4 border-l-blue-500 flex flex-col gap-2">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-blue-500 inline-block"></span>
+                                <span class="text-xs font-semibold text-slate-200">Blue Solute Channel</span>
+                            </div>
+                            <span class="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded font-mono">Medium Solutes</span>
+                        </div>
+                        <div class="flex items-center justify-between pt-1">
+                            <span id="ch2Status" class="text-xs text-rose-400 font-medium">State: CLOSED</span>
+                            <button id="toggleCh2" class="px-3 py-1 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 text-xs font-medium border border-blue-500/40 transition-all">
+                                Open Gate
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Channel 3: Purple Gate Channel -->
+                    <div class="glass-panel p-3 rounded-xl border-l-4 border-l-purple-500 flex flex-col gap-2">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-purple-500 inline-block"></span>
+                                <span class="text-xs font-semibold text-slate-200">Purple Gated Channel</span>
+                            </div>
+                            <span class="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded font-mono">Large Solutes</span>
+                        </div>
+                        <div class="flex items-center justify-between pt-1">
+                            <span id="ch3Status" class="text-xs text-rose-400 font-medium">State: CLOSED</span>
+                            <button id="toggleCh3" class="px-3 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs font-medium border border-purple-500/40 transition-all">
+                                Open Gate
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Molecule Injectors Section -->
+            <div class="p-4 border-b border-slate-800">
+                <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Molecule Dispensers</h2>
+                
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="glass-panel p-2.5 rounded-xl text-center">
+                        <span class="text-[11px] text-emerald-400 font-medium block mb-1">Green Solutes</span>
+                        <div class="flex items-center justify-center gap-1">
+                            <button id="addGreenTop" class="px-2 py-1 rounded bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 text-xs font-medium w-full border border-emerald-500/30">
+                                + Top
+                            </button>
+                            <button id="addGreenBottom" class="px-2 py-1 rounded bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 text-xs font-medium w-full border border-emerald-500/30">
+                                + Bottom
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel p-2.5 rounded-xl text-center">
+                        <span class="text-[11px] text-blue-400 font-medium block mb-1">Blue Solutes</span>
+                        <div class="flex items-center justify-center gap-1">
+                            <button id="addBlueTop" class="px-2 py-1 rounded bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 text-xs font-medium w-full border border-blue-500/30">
+                                + Top
+                            </button>
+                            <button id="addBlueBottom" class="px-2 py-1 rounded bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 text-xs font-medium w-full border border-blue-500/30">
+                                + Bottom
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-2">
+                    <div class="glass-panel p-2.5 rounded-xl text-center">
+                        <span class="text-[11px] text-purple-400 font-medium block mb-1">Purple Solutes</span>
+                        <div class="flex items-center justify-center gap-1">
+                            <button id="addPurpleTop" class="px-2 py-1 rounded bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 text-xs font-medium w-full border border-purple-500/30">
+                                + Top (Outside)
+                            </button>
+                            <button id="addPurpleBottom" class="px-2 py-1 rounded bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 text-xs font-medium w-full border border-purple-500/30">
+                                + Bottom (Inside)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between gap-2 mt-3">
+                    <button id="clearAllBtn" class="w-full py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-medium border border-rose-500/30 transition-all">
+                        <i class="fa-solid fa-trash-can mr-1"></i> Clear Particles
+                    </button>
+                </div>
+            </div>
+
+            <!-- Real-Time Concentrations & Equilibrium Data -->
+            <div class="p-4 flex-1 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
+                        <span>Concentration Gauges</span>
+                        <i class="fa-solid fa-chart-simple text-slate-500"></i>
+                    </h2>
+
+                    <!-- Green Solute Stats -->
+                    <div class="mb-3">
+                        <div class="flex justify-between text-xs text-slate-300 mb-1">
+                            <span class="font-medium text-emerald-400">Green Molecules</span>
+                            <span id="greenRatio" class="font-mono text-slate-400">Outside: 0 | Inside: 0</span>
+                        </div>
+                        <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden flex">
+                            <div id="greenTopBar" class="bg-emerald-500 h-full transition-all duration-300" style="width: 50%"></div>
+                            <div id="greenBotBar" class="bg-emerald-300 h-full transition-all duration-300" style="width: 50%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Blue Solute Stats -->
+                    <div class="mb-3">
+                        <div class="flex justify-between text-xs text-slate-300 mb-1">
+                            <span class="font-medium text-blue-400">Blue Molecules</span>
+                            <span id="blueRatio" class="font-mono text-slate-400">Outside: 0 | Inside: 0</span>
+                        </div>
+                        <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden flex">
+                            <div id="blueTopBar" class="bg-blue-500 h-full transition-all duration-300" style="width: 50%"></div>
+                            <div id="blueBotBar" class="bg-blue-300 h-full transition-all duration-300" style="width: 50%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Purple Solute Stats -->
+                    <div class="mb-4">
+                        <div class="flex justify-between text-xs text-slate-300 mb-1">
+                            <span class="font-medium text-purple-400">Purple Molecules</span>
+                            <span id="purpleRatio" class="font-mono text-slate-400">Outside: 0 | Inside: 0</span>
+                        </div>
+                        <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden flex">
+                            <div id="purpleTopBar" class="bg-purple-500 h-full transition-all duration-300" style="width: 50%"></div>
+                            <div id="purpleBotBar" class="bg-purple-300 h-full transition-all duration-300" style="width: 50%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Realtime Concentration Graph Canvas -->
+                    <div class="glass-panel p-2 rounded-xl">
+                        <div class="text-[10px] text-slate-400 mb-1 font-medium flex items-center justify-between">
+                            <span>Diffusion Trend (Net Flux)</span>
+                            <span id="equilibriumStatus" class="text-emerald-400 font-semibold">Equilibrium</span>
+                        </div>
+                        <canvas id="chartCanvas" class="w-full h-24 rounded bg-slate-950/50 block"></canvas>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-slate-800/80 text-[11px] text-slate-500 text-center">
+                    Simulating Brownian Motion & Passive Diffusion
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const chartCanvas = document.getElementById('chartCanvas');
+        const chartCtx = chartCanvas.getContext('2d');
+
+        // State variables
+        let isRunning = true;
+        let simSpeed = 1.0;
+        let particles = [];
+        let channels = [];
+        let membraneY = 0;
+        let membraneThickness = 50;
+
+        // Interactive mouse state
+        let mouseX = 0;
+        let mouseY = 0;
+        let isMouseDown = false;
+
+        // Guided Tour State
+        let currentStep = 0;
+        const tourSteps = [
+            {
+                title: "Step 1: Cell Membrane Structure",
+                text: "The cell membrane (lipid bilayer) separates the Extracellular fluid (Top) from the Cytoplasm (Inside cell, Bottom). Particles cannot cross the hydrophobic lipid barrier directly."
+            },
+            {
+                title: "Step 2: Moving Molecules Around",
+                text: "Click anywhere on the top or bottom fluid regions to add particles! You can also use the dispenser buttons in the right sidebar (+ Top / + Bottom) to inject specific molecules."
+            },
+            {
+                title: "Step 3: Opening & Closing Channel Gates",
+                text: "Click on the channel gates directly in the canvas OR use the sidebar toggles to open and close specific channels. Observe how channels are selectively permeable!"
+            },
+            {
+                title: "Step 4: Concentration Gradients & Equilibrium",
+                text: "Inject 30+ molecules into the top region with gates closed. Then open the gate and watch facilitated diffusion drive net flux down the concentration gradient until dynamic equilibrium is reached!"
+            }
+        ];
+
+        // Chart history
+        const chartHistory = [];
+        const MAX_CHART_SAMPLES = 80;
+
+        class Particle {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.type = type; // 'green', 'blue', 'purple'
+                
+                // Configure particle parameters based on type
+                if (type === 'green') {
+                    this.radius = 6;
+                    this.color = '#22c55e';
+                    this.glowColor = 'rgba(34, 197, 94, 0.4)';
+                    this.mass = 1;
+                } else if (type === 'blue') {
+                    this.radius = 8;
+                    this.color = '#3b82f6';
+                    this.glowColor = 'rgba(59, 130, 246, 0.4)';
+                    this.mass = 1.5;
+                } else {
+                    this.radius = 10;
+                    this.color = '#a855f7';
+                    this.glowColor = 'rgba(168, 85, 247, 0.4)';
+                    this.mass = 2;
+                }
+
+                // Random velocity vector
+                const angle = Math.random() * Math.PI * 2;
+                const speed = (1.5 + Math.random() * 2) / Math.sqrt(this.mass);
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+            }
+
+            update(speedMultiplier) {
+                // Thermal Brownian jitter
+                const jitter = 0.2;
+                this.vx += (Math.random() - 0.5) * jitter;
+                this.vy += (Math.random() - 0.5) * jitter;
+
+                // Speed cap
+                const currentSpeed = Math.hypot(this.vx, this.vy);
+                const maxSpeed = 4 / Math.sqrt(this.mass);
+                if (currentSpeed > maxSpeed) {
+                    this.vx = (this.vx / currentSpeed) * maxSpeed;
+                    this.vy = (this.vy / currentSpeed) * maxSpeed;
+                }
+
+                // Move
+                this.x += this.vx * speedMultiplier;
+                this.y += this.vy * speedMultiplier;
+
+                // Wall collisions (Left, Right, Top, Bottom boundaries)
+                if (this.x - this.radius < 0) {
+                    this.x = this.radius;
+                    this.vx *= -1;
+                }
+                if (this.x + this.radius > canvas.width) {
+                    this.x = canvas.width - this.radius;
+                    this.vx *= -1;
+                }
+                if (this.y - this.radius < 0) {
+                    this.y = this.radius;
+                    this.vy *= -1;
+                }
+                if (this.y + this.radius > canvas.height) {
+                    this.y = canvas.height - this.radius;
+                    this.vy *= -1;
+                }
+
+                // Membrane interaction logic
+                this.handleMembraneCollision();
+            }
+
+            handleMembraneCollision() {
+                const topEdge = membraneY - membraneThickness / 2;
+                const botEdge = membraneY + membraneThickness / 2;
+
+                // Check if particle is near or inside the membrane strip
+                if (this.y + this.radius > topEdge && this.y - this.radius < botEdge) {
+                    
+                    // Check if particle falls within any matching open channel
+                    let passedThrough = false;
+
+                    for (let ch of channels) {
+                        const inChannelX = (this.x > ch.x - ch.width / 2 + this.radius) && 
+                                           (this.x < ch.x + ch.width / 2 - this.radius);
+
+                        if (inChannelX) {
+                            // Particle is aligned with channel opening
+                            if (ch.isOpen && ch.allowedType === this.type) {
+                                // Allowed through! Keep moving smoothly
+                                passedThrough = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!passedThrough) {
+                        // Bounce off membrane top or bottom boundary
+                        if (this.y < membraneY) {
+                            // Approaching from top
+                            this.y = topEdge - this.radius;
+                            this.vy = -Math.abs(this.vy);
+                        } else {
+                            // Approaching from bottom
+                            this.y = botEdge + this.radius;
+                            this.vy = Math.abs(this.vy);
+                        }
+                    }
+                }
+            }
+
+            draw() {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.shadowColor = this.glowColor;
+                ctx.shadowBlur = 8;
+                ctx.fill();
+
+                // Inner highlight sphere
+                ctx.beginPath();
+                ctx.arc(this.x - this.radius * 0.3, this.y - this.radius * 0.3, this.radius * 0.35, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.fill();
+
+                ctx.restore();
+            }
+        }
+
+        class MembraneChannel {
+            constructor(id, x, width, allowedType, color, isOpenInitial) {
+                this.id = id;
+                this.x = x;
+                this.width = width; // Tube width
+                this.allowedType = allowedType; // 'green', 'blue', 'purple'
+                this.color = color;
+                this.isOpen = isOpenInitial;
+                this.gateAngle = isOpenInitial ? Math.PI / 2 : 0; // Gate rotation animation
+            }
+
+            toggle() {
+                this.isOpen = !this.isOpen;
+                this.updateUIStatus();
+            }
+
+            updateUIStatus() {
+                const statusElem = document.getElementById(`ch${this.id}Status`);
+                const btnElem = document.getElementById(`toggleCh${this.id}`);
+                if (statusElem && btnElem) {
+                    if (this.isOpen) {
+                        statusElem.textContent = 'State: OPEN';
+                        statusElem.className = 'text-xs text-emerald-400 font-medium';
+                        btnElem.textContent = 'Close Gate';
+                    } else {
+                        statusElem.textContent = 'State: CLOSED';
+                        statusElem.className = 'text-xs text-rose-400 font-medium';
+                        btnElem.textContent = 'Open Gate';
+                    }
+                }
+            }
+
+            draw() {
+                const topY = membraneY - membraneThickness / 2 - 8;
+                const botY = membraneY + membraneThickness / 2 + 8;
+                const totalH = botY - topY;
+
+                // Target gate angle smooth transition
+                const targetAngle = this.isOpen ? Math.PI / 2.5 : 0;
+                this.gateAngle += (targetAngle - this.gateAngle) * 0.15;
+
+                ctx.save();
+
+                // Channel Pore Outer Walls
+                const wallThick = 14;
+
+                // Left Wall Protein
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.roundRect(this.x - this.width / 2 - wallThick, topY, wallThick, totalH, 8);
+                ctx.fill();
+
+                // Right Wall Protein
+                ctx.beginPath();
+                ctx.roundRect(this.x + this.width / 2, topY, wallThick, totalH, 8);
+                ctx.fill();
+
+                // Channel Protein Highlight / Detail lines
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(this.x - this.width / 2 - wallThick / 2, topY + 5);
+                ctx.lineTo(this.x - this.width / 2 - wallThick / 2, botY - 5);
+                ctx.moveTo(this.x + this.width / 2 + wallThick / 2, topY + 5);
+                ctx.lineTo(this.x + this.width / 2 + wallThick / 2, botY - 5);
+                ctx.stroke();
+
+                // Draw Gate Flaps inside pore center
+                const gateY = membraneY;
+                const gateLength = (this.width / 2) - 2;
+
+                ctx.strokeStyle = '#f8fafc';
+                ctx.lineWidth = 4;
+                ctx.lineCap = 'round';
+
+                // Left Gate Arm
+                ctx.save();
+                ctx.translate(this.x - this.width / 2 + 2, gateY);
+                ctx.rotate(-this.gateAngle);
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(gateLength, 0);
+                ctx.stroke();
+                ctx.restore();
+
+                // Right Gate Arm
+                ctx.save();
+                ctx.translate(this.x + this.width / 2 - 2, gateY);
+                ctx.rotate(Math.PI + this.gateAngle);
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(gateLength, 0);
+                ctx.stroke();
+                ctx.restore();
+
+                // Draw Channel Icon / Indicator Label
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 10px Inter';
+                ctx.textAlign = 'center';
+                ctx.fillText(this.allowedType.toUpperCase(), this.x, topY - 12);
+
+                ctx.restore();
+            }
+
+            isPointInsideGate(px, py) {
+                // Check if user clicked on this channel to toggle gate
+                return (Math.abs(px - this.x) < this.width) && (Math.abs(py - membraneY) < 40);
+            }
+        }
+
+        function initSimulation() {
+            // Resize canvas to match display container
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+            membraneY = canvas.height / 2;
+
+            // Initialize Channels evenly spaced across middle
+            channels = [
+                new MembraneChannel(1, canvas.width * 0.25, 30, 'green', '#059669', true),
+                new MembraneChannel(2, canvas.width * 0.50, 36, 'blue', '#2563eb', false),
+                new MembraneChannel(3, canvas.width * 0.75, 42, 'purple', '#7c3aed', false)
+            ];
+
+            // Sync initial UI statuses
+            channels.forEach(ch => ch.updateUIStatus());
+
+            // Spawn default starter particles
+            spawnDefaultParticles();
+        }
+
+        function spawnDefaultParticles() {
+            particles = [];
+            // Top extracellular green particles
+            for (let i = 0; i < 25; i++) {
+                particles.push(new Particle(
+                    Math.random() * (canvas.width - 40) + 20,
+                    Math.random() * (membraneY - 60) + 20,
+                    'green'
+                ));
+            }
+
+            // Top extracellular blue particles
+            for (let i = 0; i < 15; i++) {
+                particles.push(new Particle(
+                    Math.random() * (canvas.width - 40) + 20,
+                    Math.random() * (membraneY - 60) + 20,
+                    'blue'
+                ));
+            }
+
+            // Bottom cytoplasm purple particles
+            for (let i = 0; i < 10; i++) {
+                particles.push(new Particle(
+                    Math.random() * (canvas.width - 40) + 20,
+                    membraneY + 40 + Math.random() * (canvas.height - membraneY - 60),
+                    'purple'
+                ));
+            }
+        }
+
+        function drawLipidBilayer() {
+            const topY = membraneY - membraneThickness / 2;
+            const botY = membraneY + membraneThickness / 2;
+            const headRadius = 6;
+            const spacing = 16;
+
+            ctx.save();
+
+            // Draw top and bottom lipid rows
+            for (let x = 10; x < canvas.width; x += spacing) {
+                
+                // Skip drawing lipid heads inside channel openings
+                let insideChannel = false;
+                for (let ch of channels) {
+                    if (Math.abs(x - ch.x) < (ch.width / 2 + 12)) {
+                        insideChannel = true;
+                        break;
+                    }
+                }
+                if (insideChannel) continue;
+
+                // Time-based wave animation for tail wiggle
+                const wiggle = Math.sin(Date.now() * 0.005 + x) * 2;
+
+                // --- Top Lipid Layer ---
+                // Hydrophilic Head
+                ctx.beginPath();
+                ctx.arc(x, topY, headRadius, 0, Math.PI * 2);
+                ctx.fillStyle = '#38bdf8'; // Soft cyan head
+                ctx.fill();
+
+                // Hydrophobic Tails
+                ctx.strokeStyle = '#f43f5e'; // Pink/red fatty acid tails
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(x - 2, topY + headRadius);
+                ctx.lineTo(x - 2 + wiggle, membraneY - 2);
+                ctx.moveTo(x + 2, topY + headRadius);
+                ctx.lineTo(x + 2 - wiggle, membraneY - 2);
+                ctx.stroke();
+
+                // --- Bottom Lipid Layer ---
+                // Hydrophilic Head
+                ctx.beginPath();
+                ctx.arc(x, botY, headRadius, 0, Math.PI * 2);
+                ctx.fillStyle = '#38bdf8';
+                ctx.fill();
+
+                // Hydrophobic Tails
+                ctx.beginPath();
+                ctx.moveTo(x - 2, botY - headRadius);
+                ctx.lineTo(x - 2 - wiggle, membraneY + 2);
+                ctx.moveTo(x + 2, botY - headRadius);
+                ctx.lineTo(x + 2 + wiggle, membraneY + 2);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        function render() {
+            if (isRunning) {
+                // Clear Canvas
+                ctx.fillStyle = '#090d16';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw Extracellular / Intracellular ambient background tint
+                ctx.fillStyle = 'rgba(16, 185, 129, 0.03)';
+                ctx.fillRect(0, 0, canvas.width, membraneY - membraneThickness / 2);
+
+                ctx.fillStyle = 'rgba(6, 182, 212, 0.03)';
+                ctx.fillRect(0, membraneY + membraneThickness / 2, canvas.width, canvas.height);
+
+                // Draw Lipid Bilayer
+                drawLipidBilayer();
+
+                // Update & Draw Particles
+                particles.forEach(p => {
+                    p.update(simSpeed);
+                    p.draw();
+                });
+
+                // Draw Channels
+                channels.forEach(ch => ch.draw());
+
+                // Update Stats & Realtime Chart
+                updateAnalytics();
+            }
+
+            requestAnimationFrame(render);
+        }
+
+        function updateAnalytics() {
+            let stats = {
+                green: { top: 0, bot: 0 },
+                blue: { top: 0, bot: 0 },
+                purple: { top: 0, bot: 0 }
+            };
+
+            particles.forEach(p => {
+                const isTop = p.y < membraneY;
+                if (isTop) stats[p.type].top++;
+                else stats[p.type].bot++;
+            });
+
+            // Update UI Counters
+            document.getElementById('greenRatio').textContent = `Outside: ${stats.green.top} | Inside: ${stats.green.bot}`;
+            document.getElementById('blueRatio').textContent = `Outside: ${stats.blue.top} | Inside: ${stats.blue.bot}`;
+            document.getElementById('purpleRatio').textContent = `Outside: ${stats.purple.top} | Inside: ${stats.purple.bot}`;
+
+            // Update Concentration Progress Bars
+            updateBar('greenTopBar', 'greenBotBar', stats.green.top, stats.green.bot);
+            updateBar('blueTopBar', 'blueBotBar', stats.blue.top, stats.blue.bot);
+            updateBar('purpleTopBar', 'purpleBotBar', stats.purple.top, stats.purple.bot);
+
+            // Record history for graph
+            chartHistory.push({
+                topTotal: stats.green.top + stats.blue.top + stats.purple.top,
+                botTotal: stats.green.bot + stats.blue.bot + stats.purple.bot
+            });
+
+            if (chartHistory.length > MAX_CHART_SAMPLES) {
+                chartHistory.shift();
+            }
+
+            drawChart();
+        }
+
+        function updateBar(topBarId, botBarId, topCount, botCount) {
+            const total = topCount + botCount;
+            const topPct = total === 0 ? 50 : (topCount / total) * 100;
+            const botPct = total === 0 ? 50 : (botCount / total) * 100;
+
+            document.getElementById(topBarId).style.width = `${topPct}%`;
+            document.getElementById(botBarId).style.width = `${botPct}%`;
+        }
+
+        function drawChart() {
+            chartCtx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+
+            if (chartHistory.length < 2) return;
+
+            const w = chartCanvas.width;
+            const h = chartCanvas.height;
+            const maxVal = Math.max(...chartHistory.map(d => Math.max(d.topTotal, d.botTotal)), 10);
+
+            // Draw Top Concentration Line (Green/Outside)
+            chartCtx.beginPath();
+            chartCtx.strokeStyle = '#10b981';
+            chartCtx.lineWidth = 2;
+            chartHistory.forEach((pt, i) => {
+                const x = (i / (MAX_CHART_SAMPLES - 1)) * w;
+                const y = h - (pt.topTotal / maxVal) * (h - 10) - 5;
+                if (i === 0) chartCtx.moveTo(x, y);
+                else chartCtx.lineTo(x, y);
+            });
+            chartCtx.stroke();
+
+            // Draw Bottom Concentration Line (Cyan/Inside)
+            chartCtx.beginPath();
+            chartCtx.strokeStyle = '#06b6d4';
+            chartCtx.lineWidth = 2;
+            chartHistory.forEach((pt, i) => {
+                const x = (i / (MAX_CHART_SAMPLES - 1)) * w;
+                const y = h - (pt.botTotal / maxVal) * (h - 10) - 5;
+                if (i === 0) chartCtx.moveTo(x, y);
+                else chartCtx.lineTo(x, y);
+            });
+            chartCtx.stroke();
+
+            // Check equilibrium indicator status
+            const latest = chartHistory[chartHistory.length - 1];
+            const diff = Math.abs(latest.topTotal - latest.botTotal);
+            const statusElem = document.getElementById('equilibriumStatus');
+            if (diff <= 3) {
+                statusElem.textContent = 'In Equilibrium';
+                statusElem.className = 'text-emerald-400 font-semibold';
+            } else {
+                statusElem.textContent = 'Net Flux Active';
+                statusElem.className = 'text-amber-400 font-semibold';
+            }
+        }
+
+        function setupEventListeners() {
+            // Window resize handler
+            window.addEventListener('resize', () => {
+                canvas.width = canvas.parentElement.clientWidth;
+                canvas.height = canvas.parentElement.clientHeight;
+                membraneY = canvas.height / 2;
+                channels[0].x = canvas.width * 0.25;
+                channels[1].x = canvas.width * 0.50;
+                channels[2].x = canvas.width * 0.75;
+            });
+
+            // Canvas Click Handler: Add particle or toggle channel gate
+            canvas.addEventListener('click', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                const clickY = e.clientY - rect.top;
+
+                // Check if user clicked on any channel to toggle gate
+                let clickedChannel = false;
+                channels.forEach(ch => {
+                    if (ch.isPointInsideGate(clickX, clickY)) {
+                        ch.toggle();
+                        clickedChannel = true;
+                    }
+                });
+
+                // If not clicking a channel, spawn a particle of active color
+                if (!clickedChannel) {
+                    const types = ['green', 'blue', 'purple'];
+                    const randomType = types[Math.floor(Math.random() * types.length)];
+                    particles.push(new Particle(clickX, clickY, randomType));
+                }
+            });
+
+            // Channel Toggle Buttons
+            document.getElementById('toggleCh1').addEventListener('click', () => channels[0].toggle());
+            document.getElementById('toggleCh2').addEventListener('click', () => channels[1].toggle());
+            document.getElementById('toggleCh3').addEventListener('click', () => channels[2].toggle());
+
+            // Molecule Dispenser Buttons
+            document.getElementById('addGreenTop').addEventListener('click', () => spawnParticles(5, 'green', true));
+            document.getElementById('addGreenBottom').addEventListener('click', () => spawnParticles(5, 'green', false));
+            document.getElementById('addBlueTop').addEventListener('click', () => spawnParticles(5, 'blue', true));
+            document.getElementById('addBlueBottom').addEventListener('click', () => spawnParticles(5, 'blue', false));
+            document.getElementById('addPurpleTop').addEventListener('click', () => spawnParticles(5, 'purple', true));
+            document.getElementById('addPurpleBottom').addEventListener('click', () => spawnParticles(5, 'purple', false));
+
+            // Clear All Particles
+            document.getElementById('clearAllBtn').addEventListener('click', () => {
+                particles = [];
+            });
+
+            // Play / Pause Toggle
+            const playPauseBtn = document.getElementById('playPauseBtn');
+            const playIcon = document.getElementById('playIcon');
+            playPauseBtn.addEventListener('click', () => {
+                isRunning = !isRunning;
+                if (isRunning) {
+                    playIcon.className = 'fa-solid fa-pause';
+                } else {
+                    playIcon.className = 'fa-solid fa-play';
+                }
+            });
+
+            // Step Frame Button
+            document.getElementById('stepBtn').addEventListener('click', () => {
+                if (!isRunning) {
+                    particles.forEach(p => p.update(simSpeed));
+                }
+            });
+
+            // Temperature / Speed Slider
+            document.getElementById('tempSlider').addEventListener('input', (e) => {
+                simSpeed = parseFloat(e.target.value);
+            });
+
+            // Reset Simulation
+            document.getElementById('resetSimBtn').addEventListener('click', () => {
+                spawnDefaultParticles();
+            });
+
+            // Guided Tour Buttons
+            const guideBanner = document.getElementById('guideBanner');
+            document.getElementById('guideBtn').addEventListener('click', () => {
+                guideBanner.classList.toggle('hidden');
+            });
+            document.getElementById('closeGuideBtn').addEventListener('click', () => {
+                guideBanner.classList.add('hidden');
+            });
+            document.getElementById('nextGuideBtn').addEventListener('click', () => {
+                currentStep = (currentStep + 1) % tourSteps.length;
+                updateTourStep();
+            });
+            document.getElementById('prevGuideBtn').addEventListener('click', () => {
+                currentStep = (currentStep - 1 + tourSteps.length) % tourSteps.length;
+                updateTourStep();
+            });
+        }
+
+        function spawnParticles(count, type, isTop) {
+            for (let i = 0; i < count; i++) {
+                const x = Math.random() * (canvas.width - 40) + 20;
+                const y = isTop 
+                    ? Math.random() * (membraneY - 60) + 20
+                    : membraneY + 40 + Math.random() * (canvas.height - membraneY - 60);
+                particles.push(new Particle(x, y, type));
+            }
+        }
+
+        function updateTourStep() {
+            const step = tourSteps[currentStep];
+            document.getElementById('guideStepTitle').textContent = step.title;
+            document.getElementById('guideStepText').textContent = step.text;
+            document.getElementById('guideStepNum').textContent = `${currentStep + 1}/${tourSteps.length}`;
+        }
+
+        window.onload = function() {
+            initSimulation();
+            setupEventListeners();
+            render();
+        };
+    </script>
+</body>
+</html>
